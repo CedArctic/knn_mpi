@@ -123,21 +123,21 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 		}
 
 		// XY = sum(X.^2,2) -2* X*Y.'
-		cblas_dger(CblasRowMajor, n, m, 1, normX, 1, onesN, 1, XY, m);
+		cblas_dger(CblasRowMajor, n, m, 1, normX, 1, onesM, 1, XY, m);
 
 		// XY = sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).'
-		cblas_dger(CblasRowMajor, n, m, 1, onesM, 1, normY, 1, XY, m);
+		cblas_dger(CblasRowMajor, n, m, 1, onesN, 1, normY, 1, XY, m);
 
 		// D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 		for(int i = 0; i < n*m; i++)
 			D[i] = sqrt(XY[i]);
 
 		// Free memory
-		free(normX);
-		free(normY);
-		free(onesN);
-		free(onesM);
-		free(XY);
+		//free(normX);
+		//free(normY);
+		//free(onesN);
+		//free(onesM);
+		//free(XY);
 
 		return D;
 }
@@ -231,12 +231,12 @@ double quickselect(double arr[], int *ids, int length, int idx){
 int main()
 {
 
-    double A[6] = {1.0, 2.0, 11.0, 13.0, 24.0, 22.0};
-    double B[6] = {2.0, 4.0, 11.0, 15.0, 23.0, 26.0};
+    double A[8] = {1.0, 2.0, 11.0, 13.0, 24.0, 22.0, 180.0, 2.0};
+    double B[8] = {2.0, 4.0, 11.0, 15.0, 23.0, 26.0, 1.9, 2.0};
 
-	knnresult results = kNN(A, B, 3, 3, 2, 1);
+	knnresult results = kNN(A, B, 4, 4, 2, 1);
 
-	for(int i = 0; i < 3; i++){
+	for(int i = 0; i < 4; i++){
 		printf("Point %d was paired with %d with a distance of %f \n", i, results.nidx[i], results.ndist[i]);
 	}
 
