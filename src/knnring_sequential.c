@@ -39,6 +39,9 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 		// Call quickselect on the row of D to sort it up to its k-th element
 		kselect(D + j * n, ids, n, k);
 
+		// Quicksort the results
+		quickSort(D + j * n, ids, 0, n-1);
+
 		// Write results (point id and distance)
 		for(int l = 0; l < k; l++){
 
