@@ -2,37 +2,7 @@
 #include <stdlib.h>
 #include <cblas.h>
 #include <math.h>
-
-// Definition of the kNN result struct
-typedef struct knnresult
-{
-    int * nidx;     //!< Indices (0-based) of nearest neighbors
-    double * ndist; //!< Distance of nearest neighbors
-    int m;          //!< Number of query points
-    int k;          //!< Number of nearest neighbors
-} knnresult;
-
-
-// Function Prototypes
-double* calculateD(double * X, double * Y, int n, int m, int d, int k);
-knnresult kNN(double * X, double * Y, int n, int m, int d, int k);
-void swap_double(double *a, double *b);
-void swap_int(int *a, int *b);
-int partition (double arr[], int *ids, int low, int high);
-double kselect(double arr[], int *ids, int length, int k);
-double quickselect(double arr[], int *ids, int length, int idx);
-
-
-//! Compute k nearest neighbors of each point in X [n-by-d]
-/*
- * \paramX	Corpus data points	[n-by-d]
- * \paramY	Query data points	[m-by-d]
- * \paramn	Number of corpus points	[scalar]
- * \paramm	Number of query points	[scalar]
- * \paramd	Number of dimensions	[scalar]
- * \paramk	Number of neighbors	[scalar]
- * \return	The kNN result
- */
+#include "../inc/knnring.h"
 
 
 // Application Entry Point
@@ -184,11 +154,11 @@ int partition (double arr[], int *ids, int low, int high){
 
 // Returns the median using the QuickSelect algorithm
 double kselect(double arr[], int *ids, int length, int k){
-	return quickselect(arr, ids, length, k);
+	return quickSelect(arr, ids, length, k);
 }
 
 // Returns the idx-th element of arr when arr is sorted. idx is the index (starting from 1) of the point we want to find when the array is sorted.
-double quickselect(double arr[], int *ids, int length, int idx){
+double quickSelect(double arr[], int *ids, int length, int idx){
 
     // Check to end recursion
     if (length == 1){
@@ -211,7 +181,7 @@ double quickselect(double arr[], int *ids, int length, int idx){
 
     // This means that the point we're looking (median in our case) is in the lower partition
     if (idx <= lowerLength){
-        result = quickselect(arr, ids, lowerLength, idx);
+        result = quickSelect(arr, ids, lowerLength, idx);
     }
     // This means that idx-th element is our pivot point
     else if(idx == pivotIndex){
@@ -219,13 +189,26 @@ double quickselect(double arr[], int *ids, int length, int idx){
     }
     // This means that the median is in the higher partition
     else{
-        result = quickselect(arr + pivotIndex, ids + pivotIndex, higherLength, idx - pivotIndex);
+        result = quickSelect(arr + pivotIndex, ids + pivotIndex, higherLength, idx - pivotIndex);
     }
 
     // Return result
     return result;
 }
 
+// Simple quicksort implementation that also sorts the ids array according to the way the main array was sorted
+void quickSort(double arr[], int *ids, int low, int high)
+{
+    if (low < high)
+    {
+        // idx is the partition point
+        int idx = partition(arr, ids, low, high);
+
+        // Divide and conquer
+        quickSort(arr, ids, low, idx - 1);
+        quickSort(arr, ids, idx + 1, high);
+    }
+}
 
 // Main function: Used for tests and to call the knn application entry point
 int main()
