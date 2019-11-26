@@ -127,7 +127,7 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 			ptrResults = 0;
 			ptrNewResults = 0;
 
-			/*
+
 			for(int j = 0; j < k; j++){
 				// If the point
 				if(tempResDis[r*k + ptrResults] < newResults.ndist[r*k + ptrNewResults]){
@@ -138,18 +138,6 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 					results.ndist[r*k + j] = newResults.ndist[r*k + ptrNewResults];
 					results.nidx[r*k + j] = newResults.nidx[r*k + ptrNewResults];
 					ptrNewResults++;
-				}
-			}*/
-			for(int j = 0; j < k; j++){
-
-				if(newResults.ndist[r*k + j] < results.ndist[r*k + k-1]){
-
-					results.nidx[r*k + k-1] = newResults.nidx[r*k + j];
-					results.ndist[r*k + k-1] = newResults.ndist[r*k + j];
-
-					// Quicksort the results
-					quickSort(results.ndist+ r*k, results.nidx, 0, k-1);
-
 				}
 			}
 
@@ -167,7 +155,6 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 	// Calculate distances matrix D - D is row-major and nxm
 	double* D = calculateD(X, Y, n, m, d, k);
 
-	printf("Flag\n");
 
 	// Transpose D to mxn
 	cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
