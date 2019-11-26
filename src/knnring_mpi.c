@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <cblas.h>
 #include <math.h>
+#include <string.h>
 #include "../inc/knnring.h"
-#include "mpich/mpi.h"
+#include "mpi.h"
 
 
 // Application Entry Point
@@ -42,27 +43,36 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 			ids[i] = (p-1) * n + i;
 	}
 
+	printf("Node %d has ids starting from %d and ending at %d\n", id, ids[0], ids[n-1]);
+
 	// First calculate using the original dataset, then move on to sending/receiving blocks from others
 	knnresult results = kNN(X, X, n, n, d, k);
 
+
 	// IDs in the knnresult structure are relative - we need to map them to the actual ids generated above
-	for(int i = 0; i < n; i++)
-		results.nidx[i] = ids[i];
+	for(int i = 0; i < n * k; i++)
+		results.nidx[i] = ids[results.nidx[i]];
+
 
 	// Temporary results struct, used for calculations in incoming block
 	knnresult newResults;
 
+
 	// Y and temporary Y and ids arrays, used for trading. Temporary arrays are only used in nodes with even ids
 	double* Y = calloc(n*d, sizeof(double));
 	memcpy(Y, X, n * d * sizeof(double));
-	double* tempY;
-	int* tempids;
-	if(id % 2 == 1){
-		 tempids = calloc(n, sizeof(int));
-		 tempY = calloc(n*d, sizeof(double));
-	}
+	double* tempY = calloc(n*d, sizeof(double));
+	int* tempids = calloc(n, sizeof(int));
 
-	// tempY is used only for
+
+	// Pointers and temporary arrays used for merging results.
+	int ptrResults = 0;
+	int ptrNewResults = 0;
+	double* tempResDis = calloc(n * k, sizeof(double));
+	int* tempResIDs = calloc(n * k, sizeof(int));
+
+
+	printf("p is %d", p);
 
 	// Trade blocks p-1 times in the ring
 	for(int i = 0; i < p-1; i++){
@@ -72,21 +82,21 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 
 			// Send data and ids matrix - use tags 2 & 3 respectively
 			MPI_Send(Y, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD);
-			MPI_Send(ids, n, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD);
+			MPI_Send(ids, n, MPI_INT, nxt, 3, MPI_COMM_WORLD);
 
 			// Receive data and ids matrix - use tags 2 & 3 respectively
 			MPI_Recv(Y, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			MPI_Recv(ids, n, MPI_DOUBLE, prev, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			MPI_Recv(ids, n, MPI_INT, prev, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 		}else{
 
 			// Receive data and ids matrix - use tags 2 & 3 respectively
 			MPI_Recv(tempY, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			MPI_Recv(tempids, n, MPI_DOUBLE, prev, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			MPI_Recv(tempids, n, MPI_INT, prev, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 			// Send data and ids matrix - use tags 2 & 3 respectively
 			MPI_Send(Y, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD);
-			MPI_Send(ids, n, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD);
+			MPI_Send(ids, n, MPI_INT, nxt, 3, MPI_COMM_WORLD);
 
 			// Write temporary arrays into the regular ones
 			memcpy(Y, tempY, n * d * sizeof(double));
@@ -94,15 +104,56 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 
 		}
 
+		printf("Node %d completed trading\n", id);
+
 		// Run calculations
-		newResults = kNN(X, Y, n, n, d, k);
+		newResults = kNN(Y, X, n, n, d, k);
+		printf("Node %d completed calculations\n", id);
+
 
 		// Again map ids
-		for(int i = 0; i < n; i++)
-			newResults.nidx[i] = ids[i];
+		for(int l = 0; l < n * k; l++)
+			newResults.nidx[l] = ids[newResults.nidx[l]];
+		printf("Node %d finished mapping ids after calculations\n", id);
 
-		// Merge results
 
+		// Copy points and ids array of current results to temporary arrays to safely alter the results struct bellow
+		memcpy(tempResDis, results.ndist, n * k * sizeof(double));
+		memcpy(tempResIDs, results.nidx, n * k * sizeof(int));
+		printf("Node %d finished copying original results to temporary arrays and started merging\n", id);
+
+		// Merge results and newResults arrays
+		for(int r = 0; r < n; r++){
+			ptrResults = 0;
+			ptrNewResults = 0;
+
+			/*
+			for(int j = 0; j < k; j++){
+				// If the point
+				if(tempResDis[r*k + ptrResults] < newResults.ndist[r*k + ptrNewResults]){
+					results.ndist[r*k + j] = tempResDis[r*k + ptrResults];
+					results.nidx[r*k + j] = tempResIDs[r*k + ptrResults];
+					ptrResults++;
+				}else{
+					results.ndist[r*k + j] = newResults.ndist[r*k + ptrNewResults];
+					results.nidx[r*k + j] = newResults.nidx[r*k + ptrNewResults];
+					ptrNewResults++;
+				}
+			}*/
+			for(int j = 0; j < k; j++){
+
+				if(newResults.ndist[r*k + j] < results.ndist[r*k + k-1]){
+
+					results.nidx[r*k + k-1] = newResults.nidx[r*k + j];
+					results.ndist[r*k + k-1] = newResults.ndist[r*k + j];
+
+					// Quicksort the results
+					quickSort(results.ndist+ r*k, results.nidx, 0, k-1);
+
+				}
+			}
+
+		}
 
 	}
 
@@ -315,22 +366,4 @@ void quickSort(double arr[], int *ids, int low, int high)
         quickSort(arr, ids, low, idx - 1);
         quickSort(arr, ids, idx + 1, high);
     }
-}
-
-// Main function: Used for tests and to call the knn application entry point
-int main()
-{
-
-    double A[8] = {1.0, 2.0, 11.0, 13.0, 24.0, 22.0, 180.0, 2.0};
-    double B[8] = {2.0, 4.0, 11.0, 15.0, 23.0, 26.0, 1.9, 2.0};
-
-	knnresult results = kNN(A, B, 4, 4, 2, 1);
-
-	for(int i = 0; i < 4; i++){
-		printf("Point %d was paired with %d with a distance of %f \n", i, results.nidx[i], results.ndist[i]);
-	}
-
-	//printf("Done");
-	return 0;
-
 }
