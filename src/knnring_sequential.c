@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <cblas.h>
 #include <math.h>
-#include "../inc/knnring.h"
+#include "knnring.h"
 
 
 // Application Entry Point
@@ -95,10 +95,11 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 			normY[i] = temp * temp;
 		}
 
+		// XY = sum(X.^2,2) -2* X*Y.'
+		cblas_dger(CblasRowMajor, n, m, 1, normX, 1, onesM, 1, XY, m);
+
 		// XY = sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).'
-	        for (int i=0; i<n; i++)
-            		for(int j=0; j<m; j++)
-                		XY[i*m+j] += X[i] + Y[j];
+		cblas_dger(CblasRowMajor, n, m, 1, onesN, 1, normY, 1, XY, m);
 
 		// D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 		for(int i = 0; i < n*m; i++)
@@ -210,22 +211,4 @@ void quickSort(double arr[], int *ids, int low, int high)
         quickSort(arr, ids, low, idx - 1);
         quickSort(arr, ids, idx + 1, high);
     }
-}
-
-// Main function: Used for tests and to call the knn application entry point
-int main()
-{
-
-    double A[8] = {1.0, 2.0, 11.0, 13.0, 24.0, 22.0, 180.0, 2.0};
-    double B[8] = {2.0, 4.0, 11.0, 15.0, 23.0, 26.0, 1.9, 2.0};
-
-	knnresult results = kNN(A, B, 4, 4, 2, 1);
-
-	for(int i = 0; i < 4; i++){
-		printf("Point %d was paired with %d with a distance of %f \n", i, results.nidx[i], results.ndist[i]);
-	}
-
-	//printf("Done");
-	return 0;
-
 }
