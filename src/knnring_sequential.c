@@ -95,22 +95,21 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 			normY[i] = temp * temp;
 		}
 
-		// XY = sum(X.^2,2) -2* X*Y.'
-		cblas_dger(CblasRowMajor, n, m, 1, normX, 1, onesM, 1, XY, m);
-
 		// XY = sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).'
-		cblas_dger(CblasRowMajor, n, m, 1, onesN, 1, normY, 1, XY, m);
+	        for (int i=0; i<n; i++)
+            		for(int j=0; j<m; j++)
+                		XY[i*m+j] += X[i] + Y[j];
 
 		// D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 		for(int i = 0; i < n*m; i++)
 			D[i] = sqrt(XY[i]);
 
 		// Free memory
-		//free(normX);
-		//free(normY);
-		//free(onesN);
-		//free(onesM);
-		//free(XY);
+		free(normX);
+		free(normY);
+		free(onesN);
+		free(onesM);
+		free(XY);
 
 		return D;
 }
