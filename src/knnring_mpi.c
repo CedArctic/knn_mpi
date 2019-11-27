@@ -16,12 +16,12 @@
  */
 knnresult distrAllkNN(double * X, int n, int d, int k){
 
-	// Processes and process id
+	// Get processes number and process id
 	int p, id;
 	MPI_Comm_rank(MPI_COMM_WORLD, &id); // Task ID
 	MPI_Comm_size(MPI_COMM_WORLD, &p); // # tasks
 
-	// IDs of previous and next in line for ring
+	// Find IDs of previous and next node in ring
 	int prev, nxt;
 	if(id == 0)
 		prev = p - 1;
@@ -43,13 +43,12 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 			ids[i] = (p-1) * n + i;
 	}
 
-	printf("Node %d has ids starting from %d and ending at %d\n", id, ids[0], ids[n-1]);
 
 	// First calculate using the original dataset, then move on to sending/receiving blocks from others
 	knnresult results = kNN(X, X, n, n, d, k);
 
 
-	// IDs in the knnresult structure are relative - we need to map them to the actual ids generated above
+	// IDs in the knnresult structure are relative. They start from 0 and go up to n-1. We need to map them to the actual ids generated above
 	for(int i = 0; i < n * k; i++)
 		results.nidx[i] = ids[results.nidx[i]];
 
@@ -58,11 +57,10 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	knnresult newResults;
 
 
-	// Y and temporary Y and ids arrays, used for trading. Temporary arrays are only used in nodes with even ids
+	// Y and temporary Y matrices, used for trading in nodes with even ids so that we don't overwrite Y before sending it while receiving
 	double* Y = calloc(n*d, sizeof(double));
 	memcpy(Y, X, n * d * sizeof(double));
 	double* tempY = calloc(n*d, sizeof(double));
-	int* tempids = calloc(n, sizeof(int));
 
 
 	// Pointers and temporary arrays used for merging results.
@@ -72,64 +70,62 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	int* tempResIDs = calloc(n * k, sizeof(int));
 
 
-	printf("p is %d", p);
-
 	// Trade blocks p-1 times in the ring
 	for(int i = 0; i < p-1; i++){
 
 		// If process id is even, send data first and then receive. Do the opposite for even
 		if(id % 2 == 0){
 
-			// Send data and ids matrix - use tags 2 & 3 respectively
+			// Receive data matrix
 			MPI_Send(Y, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD);
-			MPI_Send(ids, n, MPI_INT, nxt, 3, MPI_COMM_WORLD);
 
-			// Receive data and ids matrix - use tags 2 & 3 respectively
+			// Receive data matrix
 			MPI_Recv(Y, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			MPI_Recv(ids, n, MPI_INT, prev, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
 		}else{
 
-			// Receive data and ids matrix - use tags 2 & 3 respectively
+			// Receive data matrix
 			MPI_Recv(tempY, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			MPI_Recv(tempids, n, MPI_INT, prev, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-			// Send data and ids matrix - use tags 2 & 3 respectively
+			// Send data matrix
 			MPI_Send(Y, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD);
-			MPI_Send(ids, n, MPI_INT, nxt, 3, MPI_COMM_WORLD);
 
-			// Write temporary arrays into the regular ones
+			// Write temporary matrix into the regular one
 			memcpy(Y, tempY, n * d * sizeof(double));
-			memcpy(ids, tempids, n * sizeof(int));
 
 		}
 
-		printf("Node %d completed trading\n", id);
+		// Calculate new ids based on the node and the number of blocks already traded
+		for(int f = 0; f < n; f++){
+			if(id != 0)
+				ids[i] = (id - 1) * n + f + (i+1) * n;
+			else
+				ids[i] = (p-1) * n + f + (i+1) * n;
+		}
 
-		// Run calculations
+		// Run calculations on received points
 		newResults = kNN(Y, X, n, n, d, k);
-		printf("Node %d completed calculations\n", id);
 
 
-		// Again map ids
+		// Again map ids as done initially
 		for(int l = 0; l < n * k; l++)
 			newResults.nidx[l] = ids[newResults.nidx[l]];
-		printf("Node %d finished mapping ids after calculations\n", id);
 
 
 		// Copy points and ids array of current results to temporary arrays to safely alter the results struct bellow
 		memcpy(tempResDis, results.ndist, n * k * sizeof(double));
 		memcpy(tempResIDs, results.nidx, n * k * sizeof(int));
-		printf("Node %d finished copying original results to temporary arrays and started merging\n", id);
 
-		// Merge results and newResults arrays
+		// Merge results and newResults arrays in a merge-sort fashion
+		// Iterate for each query point
 		for(int r = 0; r < n; r++){
 			ptrResults = 0;
 			ptrNewResults = 0;
 
-
+			// Iterate for each neighbor
 			for(int j = 0; j < k; j++){
-				// If the point
+
+				// If the point in older results is closer than the new one, add it, else add the other one and increment the appropriate array pointer
 				if(tempResDis[r*k + ptrResults] < newResults.ndist[r*k + ptrNewResults]){
 					results.ndist[r*k + j] = tempResDis[r*k + ptrResults];
 					results.nidx[r*k + j] = tempResIDs[r*k + ptrResults];
@@ -139,6 +135,7 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 					results.nidx[r*k + j] = newResults.nidx[r*k + ptrNewResults];
 					ptrNewResults++;
 				}
+
 			}
 
 		}
@@ -152,13 +149,6 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 {
 
-	// Calculate distances matrix D - D is row-major and nxm
-	double* D = calculateD(X, Y, n, m, d, k);
-
-
-	// Transpose D to mxn
-	cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
-
 	// Create results struct
 	knnresult results;
 	results.k = k;
@@ -170,8 +160,15 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 	// Create ids array for the X array
 	int* ids = calloc(n, sizeof(int));
 
+	// Calculate distances matrix D - D is row-major and nxm
+	double* D = calculateD(X, Y, n, m, d, k);
 
-	// K-Select using quickselect to find k smallest distances for each point of Y
+
+	// Transpose D to mxn
+	cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
+
+
+	// K-Select on each row to find k smallest distances for each point of Y
 	for(int j = 0; j < m; j++){
 
 		// Re-set ids vector before executing quickselect each time
@@ -184,14 +181,12 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 		// Quicksort the results
 		quickSort(D + j * n, ids, 0, n-1);
 
-		// Write results (point id and distance)
+		// Write results (point ids and distances)
 		for(int l = 0; l < k; l++){
-
 			results.ndist[j * k + l] = D[j * n + l];
-
-			//TODO: Code up to here checks out fine - something is wrong with ids though and always returns 0
 			results.nidx[j * k + l] = ids[l];
 		}
+
 	}
 
 	// Free memory and return results
@@ -203,9 +198,6 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 // Function used to calculate D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 
-		// Temporary variable
-		double temp = 0;
-
 		// Distance matrix for results
 		double* D = calloc(n*m, sizeof(double));
 
@@ -213,15 +205,7 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 		double* normX = calloc(n, sizeof(double));
 		double* normY = calloc(m, sizeof(double));
 
-		// n and m sized one vectors
-		double* onesN = calloc(n, sizeof(double));
-		double* onesM = calloc(m, sizeof(double));
-		for(int i = 0; i < n; i++)
-			onesN[i] = 1;
-		for(int i = 0; i < m; i++)
-			onesM[i] = 1;
-
-		// Matrice to store -2*X*Y'
+		// Matrix to store -2*X*Y'
 		double* XY = calloc(n*m, sizeof(double));
 
 		// Calculate -2*XY (https://software.intel.com/en-us/mkl-tutorial-c-multiplying-matrices-using-dgemm)
@@ -229,18 +213,18 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 
 		// Calculate sum(X.^2,2), sum(Y.^2,2)
 		for(int i = 0; i < n; i++){
-			temp = cblas_dnrm2(d, X+i*d, 1);
-			normX[i] = temp * temp;
+			normX[i] = cblas_dnrm2(d, X+i*d, 1);
+			normX[i] = normX[i] * normX[i];
 		}
 		for(int i = 0; i < m; i++){
-			temp = cblas_dnrm2(d, Y+i*d, 1);
-			normY[i] = temp * temp;
+			normX[i] = cblas_dnrm2(d, Y+i*d, 1);
+			normY[i] = normX[i] * normX[i];
 		}
 
 		// XY = sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).'
-	        for (int i=0; i<n; i++)
-            		for(int j=0; j<m; j++)
-                		XY[i*m+j] += X[i] + Y[j];
+		for (int i=0; i<n; i++)
+				for(int j=0; j<m; j++)
+					XY[i*m+j] += X[i] + Y[j];
 
 		// D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 		for(int i = 0; i < n*m; i++)
@@ -249,10 +233,9 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 		// Free memory
 		free(normX);
 		free(normY);
-		free(onesN);
-		free(onesM);
 		free(XY);
 
+		// Return results
 		return D;
 }
 
@@ -353,3 +336,4 @@ void quickSort(double arr[], int *ids, int low, int high)
         quickSort(arr, ids, idx + 1, high);
     }
 }
+
