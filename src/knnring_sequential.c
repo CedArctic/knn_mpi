@@ -90,7 +90,7 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 
 		// D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 		for(int i = 0; i < n*m; i++)
-			D[i] = sqrt(XY[i]);
+			D[i] = sqrt(fabs(XY[i]));
 
 		// Free memory
 		free(normX);

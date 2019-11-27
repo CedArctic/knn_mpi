@@ -152,9 +152,15 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 }
 
 
-// Calculate results
+// Application Entry Point
 knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 {
+
+	// Calculate distances matrix D - D is row-major and nxm
+	double* D = calculateD(X, Y, n, m, d, k);
+
+	// Transpose D to mxn
+	cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
 
 	// Create results struct
 	knnresult results;
@@ -167,15 +173,8 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 	// Create ids array for the X array
 	int* ids = calloc(n, sizeof(int));
 
-	// Calculate distances matrix D - D is row-major and nxm
-	double* D = calculateD(X, Y, n, m, d, k);
 
-
-	// Transpose D to mxn
-	cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
-
-
-	// K-Select on each row to find k smallest distances for each point of Y
+	// K-Select using quickselect to find k smallest distances for each point of Y
 	for(int j = 0; j < m; j++){
 
 		// Re-set ids vector before executing quickselect each time
@@ -188,12 +187,12 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 		// Quicksort the results
 		quickSort(D + j * n, ids, 0, n-1);
 
-		// Write results (point ids and distances)
+		// Write results (point id and distance)
 		for(int l = 0; l < k; l++){
+
 			results.ndist[j * k + l] = D[j * n + l];
 			results.nidx[j * k + l] = ids[l];
 		}
-
 	}
 
 	// Free memory and return results
@@ -205,6 +204,9 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 // Function used to calculate D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 
+		// Temporary variable
+		double temp = 0;
+
 		// Distance matrix for results
 		double* D = calloc(n*m, sizeof(double));
 
@@ -212,7 +214,7 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 		double* normX = calloc(n, sizeof(double));
 		double* normY = calloc(m, sizeof(double));
 
-		// Matrix to store -2*X*Y'
+		// Matrice to store -2*X*Y'
 		double* XY = calloc(n*m, sizeof(double));
 
 		// Calculate -2*XY (https://software.intel.com/en-us/mkl-tutorial-c-multiplying-matrices-using-dgemm)
@@ -220,29 +222,28 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 
 		// Calculate sum(X.^2,2), sum(Y.^2,2)
 		for(int i = 0; i < n; i++){
-			normX[i] = cblas_dnrm2(d, X+i*d, 1);
-			normX[i] = normX[i] * normX[i];
+			temp = cblas_dnrm2(d, X+i*d, 1);
+			normX[i] = temp * temp;
 		}
 		for(int i = 0; i < m; i++){
-			normX[i] = cblas_dnrm2(d, Y+i*d, 1);
-			normY[i] = normX[i] * normX[i];
+			temp = cblas_dnrm2(d, Y+i*d, 1);
+			normY[i] = temp * temp;
 		}
 
-		// XY = sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).'
-		for (int i=0; i<n; i++)
-				for(int j=0; j<m; j++)
-					XY[i*m+j] += X[i] + Y[j];
+		// XY = sum(X.^2,2) -2* X*Y.'
+	        for (int i=0; i<n; i++)
+	    		for(int j=0; j<m; j++)
+				XY[i*m+j] += normX[i] + normY[j];
 
 		// D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 		for(int i = 0; i < n*m; i++)
-			D[i] = sqrt(XY[i]);
+			D[i] = sqrt(fabs(XY[i]));
 
 		// Free memory
 		free(normX);
 		free(normY);
 		free(XY);
 
-		// Return results
 		return D;
 }
 
