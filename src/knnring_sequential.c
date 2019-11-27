@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <cblas.h>
 #include <math.h>
-#include "knnring.h"
+#include "../inc/knnring.h"
 
 
 // Application Entry Point
@@ -11,8 +11,6 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 
 	// Calculate distances matrix D - D is row-major and nxm
 	double* D = calculateD(X, Y, n, m, d, k);
-
-	printf("Flag\n");
 
 	// Transpose D to mxn
 	cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
@@ -46,8 +44,6 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 		for(int l = 0; l < k; l++){
 
 			results.ndist[j * k + l] = D[j * n + l];
-
-			//TODO: Code up to here checks out fine - something is wrong with ids though and always returns 0
 			results.nidx[j * k + l] = ids[l];
 		}
 	}
@@ -71,14 +67,6 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 		double* normX = calloc(n, sizeof(double));
 		double* normY = calloc(m, sizeof(double));
 
-		// n and m sized one vectors
-		double* onesN = calloc(n, sizeof(double));
-		double* onesM = calloc(m, sizeof(double));
-		for(int i = 0; i < n; i++)
-			onesN[i] = 1;
-		for(int i = 0; i < m; i++)
-			onesM[i] = 1;
-
 		// Matrice to store -2*X*Y'
 		double* XY = calloc(n*m, sizeof(double));
 
@@ -96,10 +84,9 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 		}
 
 		// XY = sum(X.^2,2) -2* X*Y.'
-		cblas_dger(CblasRowMajor, n, m, 1, normX, 1, onesM, 1, XY, m);
-
-		// XY = sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).'
-		cblas_dger(CblasRowMajor, n, m, 1, onesN, 1, normY, 1, XY, m);
+	        for (int i=0; i<n; i++)
+	    		for(int j=0; j<m; j++)
+				XY[i*m+j] += normX[i] + normY[j];
 
 		// D = sqrt(sum(X.^2,2) -2* X*Y.' + sum(Y.^2,2).');
 		for(int i = 0; i < n*m; i++)
@@ -108,8 +95,6 @@ double* calculateD(double * X, double * Y, int n, int m, int d, int k){
 		// Free memory
 		free(normX);
 		free(normY);
-		free(onesN);
-		free(onesM);
 		free(XY);
 
 		return D;

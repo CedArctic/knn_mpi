@@ -32,6 +32,10 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	else
 		nxt = id + 1;
 
+	// This is the id that corresponds to the node that initially had the current block of points Y
+	// It's used to reconstruct the ids array we receive so we don't have to also send ids
+	int blockID = id;
+
 
 	// Generate ids matrix
 	int* ids = calloc(n, sizeof(int));
@@ -42,7 +46,6 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 		else
 			ids[i] = (p-1) * n + i;
 	}
-
 
 	// First calculate using the original dataset, then move on to sending/receiving blocks from others
 	knnresult results = kNN(X, X, n, n, d, k);
@@ -61,7 +64,6 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	double* Y = calloc(n*d, sizeof(double));
 	memcpy(Y, X, n * d * sizeof(double));
 	double* tempY = calloc(n*d, sizeof(double));
-
 
 	// Pointers and temporary arrays used for merging results.
 	int ptrResults = 0;
@@ -95,13 +97,17 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 
 		}
 
-		// Calculate new ids based on the node and the number of blocks already traded
-		for(int f = 0; f < n; f++){
-			if(id != 0)
-				ids[i] = (id - 1) * n + f + (i+1) * n;
+		// Reconstruct ids array of received block of points based on the node and the number of blocks already traded
+		blockID--;
+		if(blockID < 0)
+			blockID = p-1;
+		for(int j = 0; j < n; j++){
+			if(blockID != 0)
+				ids[j] = (blockID - 1) * n + j;
 			else
-				ids[i] = (p-1) * n + f + (i+1) * n;
+				ids[j] = (p-1) * n + j;
 		}
+
 
 		// Run calculations on received points
 		newResults = kNN(Y, X, n, n, d, k);
@@ -144,6 +150,7 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 
 	return results;
 }
+
 
 // Calculate results
 knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
