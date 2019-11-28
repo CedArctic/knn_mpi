@@ -39,9 +39,12 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
     // Y matrix for receiving points
 	double* Y = calloc(n*d, sizeof(double));
 
+	// Temporary Y matrix, used for trading in nodes with even ids so that we don't overwrite Y before sending it while receiving
+	double* tempY = calloc(n*d, sizeof(double));
+
 	// Start pre-fetching and sending data asynchronously
-    MPI_Isend(X, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD, reqSend);
-    MPI_Irecv(Y, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, reqReceive);
+    MPI_Isend(X, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD, &reqSend);
+    MPI_Irecv(tempY, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, &reqReceive);
 
 	// This is the id that corresponds to the node that initially had the current block of points Y
 	// It's used to reconstruct the ids array we receive so we don't have to also send ids
@@ -70,9 +73,6 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	knnresult newResults;
 
 
-	// Temporary Y matrix, used for trading in nodes with even ids so that we don't overwrite Y before sending it while receiving
-	double* tempY = calloc(n*d, sizeof(double));
-
 	// Pointers and temporary arrays used for merging results.
 	int ptrResults = 0;
 	int ptrNewResults = 0;
@@ -84,8 +84,8 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	for(int i = 0; i < p-1; i++){
 
 		// Wait for sending/receiving to complete before proceeding
-		MPI_Wait(reqSend, MPI_STATUS_IGNORE);
-		MPI_Wait(reqReceive, MPI_STATUS_IGNORE);
+		MPI_Wait(&reqSend, MPI_STATUS_IGNORE);
+		MPI_Wait(&reqReceive, MPI_STATUS_IGNORE);
 
 		// Write the received points into Y so we can start pre-fetching the next ones in tempY
 		memcpy(Y, tempY, n * d * sizeof(double));
@@ -93,8 +93,8 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 		// Last time we go in data doesn't need to be prefetched
 		if(i < p-2){
 			// Start pre-fetching
-			MPI_Isend(Y, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD, reqSend);
-			MPI_Irecv(tempY, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, reqReceive);
+			MPI_Isend(Y, n*d, MPI_DOUBLE, nxt, 2, MPI_COMM_WORLD, &reqSend);
+			MPI_Irecv(tempY, n*d, MPI_DOUBLE, prev, 2, MPI_COMM_WORLD, &reqReceive);
 		}
 
 		// Reconstruct ids array of received block of points based on the node and the number of blocks already traded
@@ -343,3 +343,4 @@ void quickSort(double arr[], int *ids, int low, int high)
         quickSort(arr, ids, idx + 1, high);
     }
 }
+
