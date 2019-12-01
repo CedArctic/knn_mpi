@@ -79,6 +79,9 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	double* tempResDis = calloc(n * k, sizeof(double));
 	int* tempResIDs = calloc(n * k, sizeof(int));
 
+	// Variables to hold minimum and maximum reduction
+	double mindis, maxdis, tempmindis, tempmaxdis;
+
 
 	// Trade blocks p-1 times in the ring
 	for(int i = 0; i < p-1; i++){
@@ -145,6 +148,33 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 
 		}
 
+	}
+
+
+	// Find overall minimum and maximum distances of knn neighbors
+	mindis = results.ndist[0];
+	maxdis = results.ndist[k-1];
+
+	// Locally reduce minimum and maximum
+	for(int i = 0; i < n; i++){
+		if(results.ndist[k*i] < mindis)
+			mindis = results.ndist[n*i];
+		if(results.ndist[k*i + k - 1] > maxdis)
+			maxdis = results.ndist[k*i + k - 1];
+	}
+	
+
+	MPI_Reduce(&mindis, &tempmindis, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&maxdis, &tempmaxdis, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+	if(id == 0){
+
+		if(mindis < tempmindis)
+			tempmindis = mindis;
+		if(maxdis > tempmaxdis)
+			tempmaxdis = maxdis;
+		printf("Minimum distance is %f, maximum is %f\n", tempmindis, tempmaxdis);
+		printf("Note: this message is printed twice because the tester runs two tests: one for column major and one for row major in this order.\n");
 	}
 
 	return results;
