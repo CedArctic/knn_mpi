@@ -16,6 +16,11 @@
  */
 knnresult distrAllkNN(double * X, int n, int d, int k){
 
+	// Timers
+	double start, end;
+	double commtime = 0;
+	double calctime = 0;
+
 	// Get processes number and process id
 	int p, id;
 	MPI_Comm_rank(MPI_COMM_WORLD, &id); // Task ID
@@ -47,8 +52,11 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 			ids[i] = (p-1) * n + i;
 	}
 
-	// First calculate using the original dataset, then move on to sending/receiving blocks from others
+	// First calculate using the original dataset and measure calculation time, then move on to sending/receiving blocks from others
+	start = MPI_Wtime();
 	knnresult results = kNN(X, X, n, n, d, k);
+	end = MPI_Wtime();
+	calctime = calctime + end - start;
 
 
 	// IDs in the knnresult structure are relative. They start from 0 and go up to n-1. We need to map them to the actual ids generated above
@@ -75,6 +83,9 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	// Trade blocks p-1 times in the ring
 	for(int i = 0; i < p-1; i++){
 
+		// Start measuring communication time
+		start = MPI_Wtime();
+		
 		// If process id is even, send data first and then receive. Do the opposite for even
 		if(id % 2 == 0){
 
@@ -97,6 +108,10 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 
 		}
 
+		// Stop measuring comms time
+		end = MPI_Wtime();
+		commtime = commtime + end - start;
+
 		// Reconstruct ids array of received block of points based on the node and the number of blocks already traded
 		blockID--;
 		if(blockID < 0)
@@ -109,8 +124,11 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 		}
 
 
-		// Run calculations on received points
+		// Run and time calculations on received points
+		start = MPI_Wtime();
 		newResults = kNN(Y, X, n, n, d, k);
+		end = MPI_Wtime();
+		calctime = calctime + end - start;
 
 
 		// Again map ids as done initially
@@ -147,6 +165,8 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 		}
 
 	}
+
+	printf("Node %d: Calculations %f s, communications %f\n", id, calctime, commtime);
 
 	return results;
 }

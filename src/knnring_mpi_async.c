@@ -16,6 +16,10 @@
  */
 knnresult distrAllkNN(double * X, int n, int d, int k){
 
+	// Timers
+	double start = MPI_Wtime();
+	double end;
+
 	// Get processes number and process id
 	int p, id;
 	MPI_Comm_rank(MPI_COMM_WORLD, &id); // Task ID
@@ -166,6 +170,9 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 
 	MPI_Reduce(&mindis, &tempmindis, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&maxdis, &tempmaxdis, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+	end = MPI_Wtime();
+	printf("Execution time for node %d: %f s\n", id, end-start);
 
 	if(id == 0){
 
