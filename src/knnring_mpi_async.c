@@ -155,14 +155,14 @@ knnresult distrAllkNN(double * X, int n, int d, int k){
 	}
 
 
-	// Find overall minimum and maximum distances of knn neighbors
-	mindis = results.ndist[0];
+	// Find overall minimum and maximum distances of knn neighbors - excluding initial 0s
+	mindis = results.ndist[1];
 	maxdis = results.ndist[k-1];
 
 	// Locally reduce minimum and maximum
 	for(int i = 0; i < n; i++){
 		if(results.ndist[k*i] < mindis)
-			mindis = results.ndist[n*i];
+			mindis = results.ndist[k*i + 1];
 		if(results.ndist[k*i + k - 1] > maxdis)
 			maxdis = results.ndist[k*i + k - 1];
 	}
