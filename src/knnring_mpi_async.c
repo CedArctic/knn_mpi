@@ -210,6 +210,13 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 	free(identityMat);
 	free(tempD);
 
+	// Create results struct
+	knnresult results;
+	results.k = k;
+	results.m = m;
+	results.ndist = calloc(m*k, sizeof(double));
+	results.nidx = calloc(m*k, sizeof(int));
+
 	// Create ids array for the X array
 	int* ids = calloc(n, sizeof(int));
 
