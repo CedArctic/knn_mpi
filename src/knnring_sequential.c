@@ -10,10 +10,22 @@ knnresult kNN(double * X, double * Y, int n, int m, int d, int k)
 {
 
 	// Calculate distances matrix D - D is row-major and nxm
-	double* D = calculateD(X, Y, n, m, d, k);
+	double* tempD = calculateD(X, Y, n, m, d, k);
+
+	double* D = calloc(m*n, sizeof(double)); 
 
 	// Transpose D to mxn
-	cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
+	//cblas_dimatcopy(CblasRowMajor, CblasTrans, n, m, 1.0, D, m, n);
+	
+	double* identityMat = calloc(n*n, sizeof(double));
+	for(int f=0; f<n; f++)
+		identityMat[f*n + f] = 1;
+
+	cblas_dgemm(CblasRowMajor, CblasTrans, CblasNoTrans, m, n, n, 1, tempD, m, identityMat, n, 0, D, n);
+
+	// Free memory
+	free(identityMat);
+	free(tempD);
 
 	// Create results struct
 	knnresult results;
